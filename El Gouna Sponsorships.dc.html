@@ -337,9 +337,15 @@ class Component extends DCLogic {
   constructor(props){
     super(props);
     this.SHEET_URL='https://script.google.com/macros/s/AKfycbyne6LHgqLHv4CBHMBwyRlH3DFBLjxmO3f5_j35RdaRqkf-qPW2HFW7eB1QtMXijPDxbQ/exec';
-    const D = (typeof window!=='undefined' && window.SPON) ? window.SPON : {target:130e6,deals:[],pipeline:[],nps:[],years:{}};
+    this.CACHE_KEY='sponsorshipDashboardCache_v1';
+    // Prefer the last successfully-synced data over the bundled placeholder
+    // numbers, so reopening the app shows real figures immediately instead
+    // of flashing the fallback values while it re-syncs in the background.
+    const cached=this.readCache();
+    const D = cached || ((typeof window!=='undefined' && window.SPON) ? window.SPON : {target:130e6,deals:[],pipeline:[],nps:[],years:{}});
     this.state = {
-      tab:'home', hero:0, filter:'all', q:'', detailId:null, toast:'', liveStatus:'connecting', lastSync:'',
+      tab:'home', hero:0, filter:'all', q:'', detailId:null, toast:'',
+      liveStatus: cached?'live':'connecting', lastSync: cached?(cached.lastSync||''):'',
       target: D.target||130e6,
       deals: (D.deals||[]).map((d,i)=>({...d,id:i})),
       pipeline: D.pipeline||[],
@@ -347,6 +353,13 @@ class Component extends DCLogic {
       years: D.years||{},
     };
   }
+  readCache(){
+    try{
+      const j=JSON.parse(localStorage.getItem(this.CACHE_KEY));
+      return (j && Array.isArray(j.deals) && j.deals.length) ? j : null;
+    }catch(e){ return null; }
+  }
+  writeCache(data){ try{ localStorage.setItem(this.CACHE_KEY, JSON.stringify(data)); }catch(e){} }
   componentDidMount(){
     if(this.state.deals.length===0){
       let n=0; const t=setInterval(()=>{
@@ -401,8 +414,11 @@ class Component extends DCLogic {
       if(y24) years['2024']=this.sumContract(y24);
       if(y25) years['2025']=this.sumContract(y25);
       const nps=(sat&&sat.length)?this.mapNps(sat):this.state.nps;
+      const lastSync=this.nowStr();
+      const dealsWithId=deals.map((d,i)=>({...d,id:i}));
       this._retries=0;
-      this.setState({deals:deals.map((d,i)=>({...d,id:i})),years,nps,liveStatus:'live',lastSync:this.nowStr()});
+      this.setState({deals:dealsWithId,years,nps,liveStatus:'live',lastSync});
+      this.writeCache({target:this.state.target,deals:dealsWithId,years,nps,lastSync});
     }catch(e){
       this.setState({liveStatus:'offline'});
       // self-heal from a transient failure well before the next 60s poll
