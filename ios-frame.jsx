@@ -214,16 +214,20 @@ function IOSDevice({
   const embedded = typeof window !== 'undefined' && window.self !== window.top;
 
   if (!embedded) {
+    // Pinned to the viewport with `fixed` (not a normal-flow 100dvh box) —
+    // iOS Safari's address bar collapsing on scroll retriggers dvh layout
+    // mid-scroll, which showed up as a ghosted double-render of the whole
+    // screen. Fixed positioning is anchored once and doesn't repaint that way.
     return (
       <div data-om-starter="ios-frame" style={{
-        width: '100%', height: '100dvh', overflow: 'hidden',
-        position: 'relative', background: dark ? '#000' : '#F2F2F7',
+        position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, overflow: 'hidden',
+        background: dark ? '#000' : '#F2F2F7',
         fontFamily: '-apple-system, system-ui, sans-serif',
         WebkitFontSmoothing: 'antialiased',
       }}>
         <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
           {title !== undefined && <IOSNavBar title={title} dark={dark} />}
-          <div style={{ flex: 1, overflow: 'auto' }}>{children}</div>
+          <div style={{ flex: 1, overflow: 'auto', WebkitOverflowScrolling: 'touch' }}>{children}</div>
           {keyboard && <IOSKeyboard dark={dark} />}
         </div>
       </div>
