@@ -231,11 +231,24 @@ function IOSDevice({
         fontFamily: '-apple-system, system-ui, sans-serif',
         WebkitFontSmoothing: 'antialiased',
       }}>
-        <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-          {title !== undefined && <IOSNavBar title={title} dark={dark} />}
-          <div style={{ flex: 1, overflow: 'auto', WebkitOverflowScrolling: 'touch' }}>{children}</div>
-          {keyboard && <IOSKeyboard dark={dark} />}
-        </div>
+        {title === undefined && !keyboard ? (
+          // No nav bar / keyboard to make room for, so skip the
+          // height:100% -> flex:1 -> height:100% percentage relay entirely —
+          // some real-device WebKit builds don't reliably hand a flex item's
+          // resolved (not literal) height down to a percentage-sized grandchild,
+          // which showed up as the content collapsing short and leaving a gap
+          // at the bottom. Absolute + inset:0 against this fixed, definite-height
+          // frame needs no percentage relay at all.
+          <div style={{ position: 'absolute', inset: 0, overflow: 'auto', WebkitOverflowScrolling: 'touch' }}>
+            {children}
+          </div>
+        ) : (
+          <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+            {title !== undefined && <IOSNavBar title={title} dark={dark} />}
+            <div style={{ flex: 1, overflow: 'auto', WebkitOverflowScrolling: 'touch' }}>{children}</div>
+            {keyboard && <IOSKeyboard dark={dark} />}
+          </div>
+        )}
       </div>
     );
   }
