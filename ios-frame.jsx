@@ -203,6 +203,33 @@ function IOSDevice({
   children, width = 402, height = 874, dark = false,
   title, keyboard = false,
 }) {
+  // Rendered two ways depending on where this document is loaded:
+  //  - inside the Claude Design tool's preview iframe, we draw a fake
+  //    phone bezel + status bar so it reads as a device mockup on a
+  //    desktop canvas.
+  //  - opened directly (real deployment, e.g. a phone's own browser or
+  //    an "Add to Home Screen" app), the real device already draws its
+  //    own status bar and home indicator, so we go edge-to-edge instead
+  //    of nesting a second fake one inside it.
+  const embedded = typeof window !== 'undefined' && window.self !== window.top;
+
+  if (!embedded) {
+    return (
+      <div data-om-starter="ios-frame" style={{
+        width: '100%', height: '100dvh', overflow: 'hidden',
+        position: 'relative', background: dark ? '#000' : '#F2F2F7',
+        fontFamily: '-apple-system, system-ui, sans-serif',
+        WebkitFontSmoothing: 'antialiased',
+      }}>
+        <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+          {title !== undefined && <IOSNavBar title={title} dark={dark} />}
+          <div style={{ flex: 1, overflow: 'auto' }}>{children}</div>
+          {keyboard && <IOSKeyboard dark={dark} />}
+        </div>
+      </div>
+    );
+  }
+
   return (
     // data-om-starter: inert presence marker — Claude Design's starter-usage
     // probe reads it; it renders nothing. Keep it on this root element.
