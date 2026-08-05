@@ -199,6 +199,33 @@ function IOSList({ header, children, dark = false }) {
 // ─────────────────────────────────────────────────────────────
 // Device frame
 // ─────────────────────────────────────────────────────────────
+function useMeasuredViewportHeight() {
+  // iOS WebKit's `vh`/`dvh`/`svh` units are documented to disagree with the
+  // actual rendered viewport in some versions — both in a regular Safari tab
+  // and in standalone "Add to Home Screen" mode — which showed up here as a
+  // gap between the app's own bottom tab bar and the real screen edge no
+  // matter which CSS unit or positioning scheme was used. Measuring the
+  // live viewport in JS and applying it as a plain pixel height sidesteps
+  // the CSS unit entirely instead of trusting it.
+  const getH = () => (typeof window === 'undefined' ? 800
+    : (window.visualViewport ? window.visualViewport.height : window.innerHeight));
+  const [h, setH] = React.useState(getH);
+  React.useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const update = () => setH(getH());
+    update();
+    window.addEventListener('resize', update);
+    window.addEventListener('orientationchange', update);
+    window.visualViewport && window.visualViewport.addEventListener('resize', update);
+    return () => {
+      window.removeEventListener('resize', update);
+      window.removeEventListener('orientationchange', update);
+      window.visualViewport && window.visualViewport.removeEventListener('resize', update);
+    };
+  }, []);
+  return h;
+}
+
 function IOSDevice({
   children, width = 402, height = 874, dark = false,
   title, keyboard = false,
@@ -212,21 +239,17 @@ function IOSDevice({
   //    own status bar and home indicator, so we go edge-to-edge instead
   //    of nesting a second fake one inside it.
   const embedded = typeof window !== 'undefined' && window.self !== window.top;
+  const measuredH = useMeasuredViewportHeight();
 
   if (!embedded) {
     // Pinned to the viewport with `fixed` (not a normal-flow box) — iOS
     // Safari's address bar collapsing on scroll retriggers layout mid-scroll
     // otherwise, which showed up as a ghosted double-render of the whole
-    // screen. Height is an explicit `100dvh` rather than `bottom: 0`: a
-    // `fixed` box's containing block is only guaranteed to be the real
-    // viewport when no ancestor sets a transform/filter/will-change (which
-    // would silently repurpose it as the containing block instead) — `dvh`
-    // sidesteps that entirely since it's resolved against the viewport
-    // directly, not by percentage against whatever ancestor box this ends
-    // up positioned relative to.
+    // screen. Height is the JS-measured viewport height, not a CSS unit —
+    // see useMeasuredViewportHeight above.
     return (
       <div data-om-starter="ios-frame" style={{
-        position: 'fixed', top: 0, left: 0, width: '100%', height: '100dvh', overflow: 'hidden',
+        position: 'fixed', top: 0, left: 0, width: '100%', height: measuredH + 'px', overflow: 'hidden',
         background: dark ? '#000' : '#F2F2F7',
         fontFamily: '-apple-system, system-ui, sans-serif',
         WebkitFontSmoothing: 'antialiased',
