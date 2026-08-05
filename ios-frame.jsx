@@ -197,6 +197,48 @@ function IOSList({ header, children, dark = false }) {
 }
 
 // ─────────────────────────────────────────────────────────────
+// Temporary on-device diagnostic — remove once the bottom-gap bug is
+// root-caused. Shows the actual numbers a real phone is using, since
+// none of this reproduces in any sandboxed/desktop test browser.
+// ─────────────────────────────────────────────────────────────
+function DebugOverlay() {
+  const [info, setInfo] = React.useState('measuring…');
+  React.useEffect(() => {
+    const measure = () => {
+      const frame = document.querySelector('[data-om-starter="ios-frame"]');
+      const frameRect = frame ? frame.getBoundingClientRect() : null;
+      const homeLabel = frame ? [...frame.querySelectorAll('div')].find(d => d.textContent.trim() === 'Home') : null;
+      const tabBarRect = homeLabel ? homeLabel.closest('div').parentElement.getBoundingClientRect() : null;
+      const lines = [
+        'innerH=' + window.innerHeight,
+        'vvH=' + (window.visualViewport ? Math.round(window.visualViewport.height) : 'n/a'),
+        'docClientH=' + document.documentElement.clientHeight,
+        'bodyScrollH=' + document.body.scrollHeight,
+        'htmlScrollH=' + document.documentElement.scrollHeight,
+        'frameH=' + (frameRect ? Math.round(frameRect.height) : 'n/a'),
+        'frameBottom=' + (frameRect ? Math.round(frameRect.bottom) : 'n/a'),
+        'tabBarBottom=' + (tabBarRect ? Math.round(tabBarRect.bottom) : 'n/a'),
+        'standalone=' + window.navigator.standalone,
+        'dpr=' + window.devicePixelRatio,
+      ];
+      setInfo(lines.join('  '));
+    };
+    measure();
+    const t = setInterval(measure, 1000);
+    window.addEventListener('resize', measure);
+    return () => { clearInterval(t); window.removeEventListener('resize', measure); };
+  }, []);
+  return (
+    <div style={{
+      position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 999999,
+      background: 'rgba(200,0,0,0.9)', color: '#fff', fontSize: 9,
+      fontFamily: 'monospace', padding: '4px 6px', lineHeight: 1.4,
+      whiteSpace: 'pre-wrap', pointerEvents: 'none',
+    }}>{info}</div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────
 // Device frame
 // ─────────────────────────────────────────────────────────────
 function useMeasuredViewportHeight() {
@@ -272,6 +314,7 @@ function IOSDevice({
             {keyboard && <IOSKeyboard dark={dark} />}
           </div>
         )}
+        <DebugOverlay />
       </div>
     );
   }

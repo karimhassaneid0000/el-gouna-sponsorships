@@ -397,27 +397,34 @@ class Component extends DCLogic {
     clearTimeout(this._retryT);
     try{
       if(this.state.liveStatus!=='live') this.setState({liveStatus:'connecting'});
-      // fire every sheet at once — sequential awaits here were the main reason
-      // a sync could take 20-30s+ (Apps Script cold-start latency paid once
-      // per request instead of once total).
-      const [rows,y23,y24,y25,sat]=await Promise.all([
-        this.fetchSheet('2026'),
+      // Fetch the sheet that gates "Live" status alone first. Firing it
+      // alongside 4 other requests (a prior attempt at speeding this up)
+      // meant 5 simultaneous hits on the same Apps Script backend from one
+      // client — which appears to fail/slow down under that concurrency on
+      // a real mobile connection even though each request is fast alone.
+      // Secondary sheets (history/NPS) load after, and can't take the whole
+      // sync down if one of them is slow or fails.
+      const rows=await this.fetchSheet('2026');
+      const deals=this.mapDeals(rows);
+      if(!deals.length) throw new Error('empty');
+      const lastSync=this.nowStr();
+      const dealsWithId=deals.map((d,i)=>({...d,id:i}));
+      this._retries=0;
+      this.setState({deals:dealsWithId,liveStatus:'live',lastSync});
+      this.writeCache({target:this.state.target,deals:dealsWithId,years:this.state.years,nps:this.state.nps,lastSync});
+
+      const [y23,y24,y25,sat]=await Promise.all([
         this.fetchSafe('2023 ✅'),
         this.fetchSafe('2024 ✅'),
         this.fetchSafe('2025 ✅'),
         this.fetchSafe('Sponsor Satsfaction'),
       ]);
-      const deals=this.mapDeals(rows);
-      if(!deals.length) throw new Error('empty');
       const years={...this.state.years};
       if(y23) years['2023']=this.sumContract(y23);
       if(y24) years['2024']=this.sumContract(y24);
       if(y25) years['2025']=this.sumContract(y25);
       const nps=(sat&&sat.length)?this.mapNps(sat):this.state.nps;
-      const lastSync=this.nowStr();
-      const dealsWithId=deals.map((d,i)=>({...d,id:i}));
-      this._retries=0;
-      this.setState({deals:dealsWithId,years,nps,liveStatus:'live',lastSync});
+      this.setState({years,nps});
       this.writeCache({target:this.state.target,deals:dealsWithId,years,nps,lastSync});
     }catch(e){
       this.setState({liveStatus:'offline'});
