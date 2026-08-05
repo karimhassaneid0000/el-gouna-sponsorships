@@ -52,7 +52,7 @@
         <div style="max-width:196px">
           <img src="assets/elgouna-logo.png" alt="El Gouna" style="height:19px;display:block;margin-bottom:6px" />
           <div style="font-size:19px;font-weight:700;color:#1B599F;line-height:1.12">Sponsorship Dashboard</div>
-          <div style="display:flex;align-items:center;gap:6px;margin-top:6px">
+          <div onClick="{{ retrySync }}" style="display:flex;align-items:center;gap:6px;margin-top:6px;cursor:pointer">
             <div style="width:7px;height:7px;border-radius:50%;background:{{ liveColor }}"></div>
             <span style="font-size:11px;color:#9aa0a8;font-weight:500">{{ liveText }}</span>
           </div>
@@ -361,7 +361,7 @@ class Component extends DCLogic {
     this.loadLive();
     this._poll=setInterval(()=>this.loadLive(),60000);
   }
-  componentWillUnmount(){ clearInterval(this._poll); clearTimeout(this._t); }
+  componentWillUnmount(){ clearInterval(this._poll); clearTimeout(this._t); clearTimeout(this._retryT); }
   nowStr(){ return new Date().toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'}); }
   money(v){ if(v==null||v==='')return 0; if(typeof v==='number')return v; const s=String(v).replace(/[^0-9.\-]/g,''); const n=parseFloat(s); return isNaN(n)?0:n; }
   toISO(v){ if(v==null||v==='')return null; if(typeof v==='number'){ const d=new Date(Date.UTC(1899,11,30)+v*86400000); return isNaN(d.getTime())?null:d.toISOString().slice(0,10); } const d=new Date(v); return isNaN(d.getTime())?null:d.toISOString().slice(0,10); }
@@ -369,22 +369,46 @@ class Component extends DCLogic {
   mapDeals(rows){ return rows.filter(r=>!this.isLabelRow(r['Entity']||r['Brand'])).map(r=>{ const contract=this.money(r['Contract Value (Excl. VAT)']); const collected=this.money(r['Collected Amount (Excl. VAT)']); const out=this.money(r['Outstanding Amount (Excl. VAT)'])||Math.max(0,contract-collected); return {q:r['Quarter']||'',entity:r['Entity']||'',brand:String(r['Brand']||'').trim(),status:r['Payment Status']||'',sector:r['Sector']||'Other',location:r['Location']||'',contract,collected,outstanding:out,start:this.toISO(r['Start Date']),end:this.toISO(r['End Date']),season:r['Event / Season']||'',terms:r['Payment Terms']||'',contact:r['Contact Person']||'',comment:r['Comments']||''}; }); }
   sumContract(rows){ return rows.filter(r=>!this.isLabelRow(r['Entity']||r['Brand'])).reduce((a,r)=>a+this.money(r['Contract Value (Excl. VAT)']),0); }
   mapNps(rows){ return rows.map(r=>{ const v=Object.values(r); return {date:this.toISO(v[0]),overall:+v[1]||0,objectives:+v[2]||0,team:+v[3]||0,setup:+v[4]||0,returnAgain:v[5]||'',comment:v[6]||'',company:v[7]||''}; }).filter(n=>n.overall>0||n.company); }
-  async fetchSheet(name){ const r=await fetch(this.SHEET_URL+'?sheet='+encodeURIComponent(name)); if(!r.ok) throw new Error('http'); const j=await r.json(); if(j&&j.error) throw new Error(j.error); return (j&&j.rows)||[]; }
+  async fetchSheet(name, ms=20000){
+    const ctrl=new AbortController(); const timer=setTimeout(()=>ctrl.abort(),ms);
+    try{
+      const r=await fetch(this.SHEET_URL+'?sheet='+encodeURIComponent(name),{signal:ctrl.signal});
+      if(!r.ok) throw new Error('http');
+      const j=await r.json();
+      if(j&&j.error) throw new Error(j.error);
+      return (j&&j.rows)||[];
+    } finally { clearTimeout(timer); }
+  }
   async fetchSafe(name){ try{ return await this.fetchSheet(name); }catch(e){ return null; } }
   async loadLive(){
+    clearTimeout(this._retryT);
     try{
       if(this.state.liveStatus!=='live') this.setState({liveStatus:'connecting'});
-      const rows=await this.fetchSheet('2026');
+      // fire every sheet at once — sequential awaits here were the main reason
+      // a sync could take 20-30s+ (Apps Script cold-start latency paid once
+      // per request instead of once total).
+      const [rows,y23,y24,y25,sat]=await Promise.all([
+        this.fetchSheet('2026'),
+        this.fetchSafe('2023 ✅'),
+        this.fetchSafe('2024 ✅'),
+        this.fetchSafe('2025 ✅'),
+        this.fetchSafe('Sponsor Satsfaction'),
+      ]);
       const deals=this.mapDeals(rows);
       if(!deals.length) throw new Error('empty');
-      const [y23,y24,y25,sat]=await Promise.all([this.fetchSafe('2023 ✅'),this.fetchSafe('2024 ✅'),this.fetchSafe('2025 ✅'),this.fetchSafe('Sponsor Satsfaction')]);
       const years={...this.state.years};
       if(y23) years['2023']=this.sumContract(y23);
       if(y24) years['2024']=this.sumContract(y24);
       if(y25) years['2025']=this.sumContract(y25);
       const nps=(sat&&sat.length)?this.mapNps(sat):this.state.nps;
+      this._retries=0;
       this.setState({deals:deals.map((d,i)=>({...d,id:i})),years,nps,liveStatus:'live',lastSync:this.nowStr()});
-    }catch(e){ this.setState({liveStatus:'offline'}); }
+    }catch(e){
+      this.setState({liveStatus:'offline'});
+      // self-heal from a transient failure well before the next 60s poll
+      this._retries=(this._retries||0)+1;
+      if(this._retries<=3) this._retryT=setTimeout(()=>this.loadLive(),5000);
+    }
   }
   // ---- helpers ----
   fmtM(v){ v=+v||0; const a=Math.abs(v); if(a>=1e6) return (v/1e6).toFixed(1)+'M'; if(a>=1e3) return Math.round(v/1e3)+'K'; return String(Math.round(v)); }
@@ -524,6 +548,7 @@ class Component extends DCLogic {
       goChase:()=>this.setState({tab:'deals',filter:'chase',detailId:null}),
       goPipeline:()=>this.setState({tab:'deals',filter:'pipeline',detailId:null}),
       bell:()=>this.toastMsg(openDeals+' deals need attention · '+this.egp(outstanding)+' outstanding'),
+      retrySync:()=>{ if(S.liveStatus!=='connecting'){ this.toastMsg('Refreshing…'); this.loadLive(); } },
       // home
       hero:heroSlides[S.hero], heroDots, attention, yearBars,
       // deals

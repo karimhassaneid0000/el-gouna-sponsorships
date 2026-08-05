@@ -214,13 +214,19 @@ function IOSDevice({
   const embedded = typeof window !== 'undefined' && window.self !== window.top;
 
   if (!embedded) {
-    // Pinned to the viewport with `fixed` (not a normal-flow 100dvh box) —
-    // iOS Safari's address bar collapsing on scroll retriggers dvh layout
-    // mid-scroll, which showed up as a ghosted double-render of the whole
-    // screen. Fixed positioning is anchored once and doesn't repaint that way.
+    // Pinned to the viewport with `fixed` (not a normal-flow box) — iOS
+    // Safari's address bar collapsing on scroll retriggers layout mid-scroll
+    // otherwise, which showed up as a ghosted double-render of the whole
+    // screen. Height is an explicit `100dvh` rather than `bottom: 0`: a
+    // `fixed` box's containing block is only guaranteed to be the real
+    // viewport when no ancestor sets a transform/filter/will-change (which
+    // would silently repurpose it as the containing block instead) — `dvh`
+    // sidesteps that entirely since it's resolved against the viewport
+    // directly, not by percentage against whatever ancestor box this ends
+    // up positioned relative to.
     return (
       <div data-om-starter="ios-frame" style={{
-        position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, overflow: 'hidden',
+        position: 'fixed', top: 0, left: 0, width: '100%', height: '100dvh', overflow: 'hidden',
         background: dark ? '#000' : '#F2F2F7',
         fontFamily: '-apple-system, system-ui, sans-serif',
         WebkitFontSmoothing: 'antialiased',
