@@ -248,33 +248,6 @@ function DebugOverlay2() {
 // ─────────────────────────────────────────────────────────────
 // Device frame
 // ─────────────────────────────────────────────────────────────
-function useMeasuredViewportHeight() {
-  // iOS WebKit's `vh`/`dvh`/`svh` units are documented to disagree with the
-  // actual rendered viewport in some versions — both in a regular Safari tab
-  // and in standalone "Add to Home Screen" mode — which showed up here as a
-  // gap between the app's own bottom tab bar and the real screen edge no
-  // matter which CSS unit or positioning scheme was used. Measuring the
-  // live viewport in JS and applying it as a plain pixel height sidesteps
-  // the CSS unit entirely instead of trusting it.
-  const getH = () => (typeof window === 'undefined' ? 800
-    : (window.visualViewport ? window.visualViewport.height : window.innerHeight));
-  const [h, setH] = React.useState(getH);
-  React.useEffect(() => {
-    if (typeof window === 'undefined') return;
-    const update = () => setH(getH());
-    update();
-    window.addEventListener('resize', update);
-    window.addEventListener('orientationchange', update);
-    window.visualViewport && window.visualViewport.addEventListener('resize', update);
-    return () => {
-      window.removeEventListener('resize', update);
-      window.removeEventListener('orientationchange', update);
-      window.visualViewport && window.visualViewport.removeEventListener('resize', update);
-    };
-  }, []);
-  return h;
-}
-
 function IOSDevice({
   children, width = 402, height = 874, dark = false,
   title, keyboard = false,
@@ -288,17 +261,24 @@ function IOSDevice({
   //    own status bar and home indicator, so we go edge-to-edge instead
   //    of nesting a second fake one inside it.
   const embedded = typeof window !== 'undefined' && window.self !== window.top;
-  const measuredH = useMeasuredViewportHeight();
 
   if (!embedded) {
     // Pinned to the viewport with `fixed` (not a normal-flow box) — iOS
     // Safari's address bar collapsing on scroll retriggers layout mid-scroll
     // otherwise, which showed up as a ghosted double-render of the whole
-    // screen. Height is the JS-measured viewport height, not a CSS unit —
-    // see useMeasuredViewportHeight above.
+    // screen.
+    //
+    // Sizing is `inset: 0`, not `top:0` + a JS-measured height: on-device
+    // diagnostics showed `innerHeight`/`visualViewport.height` are measured
+    // excluding the top notch/status-bar safe area (screenH - safeAreaTop),
+    // while `viewport-fit=cover` places a `top:0` box at the *true* physical
+    // top, under the notch. Combining "true top" with a "safe-area-excluded"
+    // height left the box exactly safeAreaTop short of the real bottom edge
+    // — that was the reported gap in standalone (Add to Home Screen) mode.
+    // `inset:0` lets the browser resolve both true edges directly instead.
     return (
       <div data-om-starter="ios-frame" style={{
-        position: 'fixed', top: 0, left: 0, width: '100%', height: measuredH + 'px', overflow: 'hidden',
+        position: 'fixed', inset: 0, overflow: 'hidden',
         background: dark ? '#000' : '#F2F2F7',
         fontFamily: '-apple-system, system-ui, sans-serif',
         WebkitFontSmoothing: 'antialiased',
