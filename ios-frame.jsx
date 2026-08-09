@@ -245,6 +245,20 @@ function DebugOverlay2() {
   );
 }
 
+function useScreenHeight() {
+  const get = () => (typeof window === 'undefined' ? 800 : (window.screen && window.screen.height) || window.innerHeight);
+  const [h, setH] = React.useState(get);
+  React.useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const update = () => setH(get());
+    update();
+    window.addEventListener('resize', update);
+    window.addEventListener('orientationchange', update);
+    return () => { window.removeEventListener('resize', update); window.removeEventListener('orientationchange', update); };
+  }, []);
+  return h;
+}
+
 // ─────────────────────────────────────────────────────────────
 // Device frame
 // ─────────────────────────────────────────────────────────────
@@ -261,24 +275,17 @@ function IOSDevice({
   //    own status bar and home indicator, so we go edge-to-edge instead
   //    of nesting a second fake one inside it.
   const embedded = typeof window !== 'undefined' && window.self !== window.top;
+  const screenH = useScreenHeight();
 
   if (!embedded) {
-    // Pinned to the viewport with `fixed` (not a normal-flow box) — iOS
-    // Safari's address bar collapsing on scroll retriggers layout mid-scroll
-    // otherwise, which showed up as a ghosted double-render of the whole
-    // screen.
-    //
-    // Sizing is `inset: 0`, not `top:0` + a JS-measured height: on-device
-    // diagnostics showed `innerHeight`/`visualViewport.height` are measured
-    // excluding the top notch/status-bar safe area (screenH - safeAreaTop),
-    // while `viewport-fit=cover` places a `top:0` box at the *true* physical
-    // top, under the notch. Combining "true top" with a "safe-area-excluded"
-    // height left the box exactly safeAreaTop short of the real bottom edge
-    // — that was the reported gap in standalone (Add to Home Screen) mode.
-    // `inset:0` lets the browser resolve both true edges directly instead.
+    // On-device measurement showed innerHeight/visualViewport.height and
+    // even `inset:0` all cap out short of the real screen height in
+    // standalone Home Screen mode on this device (894 vs a real 956) —
+    // window.screen.height reads the true value, so use that directly
+    // instead of anything the layout/visual viewport reports.
     return (
       <div data-om-starter="ios-frame" style={{
-        position: 'fixed', inset: 0, overflow: 'hidden',
+        position: 'fixed', top: 0, left: 0, width: '100%', height: screenH + 'px', overflow: 'hidden',
         background: dark ? '#000' : '#F2F2F7',
         fontFamily: '-apple-system, system-ui, sans-serif',
         WebkitFontSmoothing: 'antialiased',
