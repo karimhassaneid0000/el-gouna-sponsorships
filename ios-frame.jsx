@@ -238,10 +238,10 @@ function DebugOverlay2() {
   return (
     <div style={{
       position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 999999,
-      background: 'rgba(200,0,0,0.9)', color: '#fff', fontSize: 8,
+      background: 'rgba(0,80,220,0.9)', color: '#fff', fontSize: 8,
       fontFamily: 'monospace', padding: '4px 6px', lineHeight: 1.4,
       whiteSpace: 'pre-wrap', pointerEvents: 'none',
-    }}>{info}</div>
+    }}>BUILD-v3-BLUE {info}</div>
   );
 }
 
