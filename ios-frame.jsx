@@ -197,6 +197,55 @@ function IOSList({ header, children, dark = false }) {
 }
 
 // ─────────────────────────────────────────────────────────────
+// Temporary on-device diagnostic (round 2) — the first round confirmed a
+// Safari-tab gap was just the address bar, but standalone Home Screen mode
+// (no browser chrome at all) shows the same gap, so this checks a different
+// suspect: the home-indicator safe area not being what it's assumed to be.
+// ─────────────────────────────────────────────────────────────
+function DebugOverlay2() {
+  const [info, setInfo] = React.useState('measuring…');
+  React.useEffect(() => {
+    const probe = document.createElement('div');
+    probe.style.cssText = 'position:fixed;bottom:0;left:0;width:0;height:0;padding-bottom:env(safe-area-inset-bottom);padding-top:env(safe-area-inset-top);visibility:hidden;pointer-events:none';
+    document.body.appendChild(probe);
+    const measure = () => {
+      const cs = getComputedStyle(probe);
+      const frame = document.querySelector('[data-om-starter="ios-frame"]');
+      const frameRect = frame ? frame.getBoundingClientRect() : null;
+      const homeLabel = frame ? [...frame.querySelectorAll('div')].find(d => d.textContent.trim() === 'Home') : null;
+      const tabBarRect = homeLabel ? homeLabel.closest('div').parentElement.getBoundingClientRect() : null;
+      const lines = [
+        'innerH=' + window.innerHeight,
+        'vvH=' + (window.visualViewport ? Math.round(window.visualViewport.height) : 'n/a'),
+        'vvOffsetTop=' + (window.visualViewport ? Math.round(window.visualViewport.offsetTop) : 'n/a'),
+        'screenH=' + window.screen.height,
+        'screenAvailH=' + window.screen.availHeight,
+        'dpr=' + window.devicePixelRatio,
+        'safeTop=' + cs.paddingTop,
+        'safeBottom=' + cs.paddingBottom,
+        'frameH=' + (frameRect ? Math.round(frameRect.height) : 'n/a'),
+        'frameBottom=' + (frameRect ? Math.round(frameRect.bottom) : 'n/a'),
+        'tabBarBottom=' + (tabBarRect ? Math.round(tabBarRect.bottom) : 'n/a'),
+        'standalone=' + window.navigator.standalone,
+      ];
+      setInfo(lines.join('  '));
+    };
+    measure();
+    const t = setInterval(measure, 1000);
+    window.addEventListener('resize', measure);
+    return () => { clearInterval(t); window.removeEventListener('resize', measure); probe.remove(); };
+  }, []);
+  return (
+    <div style={{
+      position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 999999,
+      background: 'rgba(200,0,0,0.9)', color: '#fff', fontSize: 8,
+      fontFamily: 'monospace', padding: '4px 6px', lineHeight: 1.4,
+      whiteSpace: 'pre-wrap', pointerEvents: 'none',
+    }}>{info}</div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────
 // Device frame
 // ─────────────────────────────────────────────────────────────
 function useMeasuredViewportHeight() {
@@ -272,6 +321,7 @@ function IOSDevice({
             {keyboard && <IOSKeyboard dark={dark} />}
           </div>
         )}
+        <DebugOverlay2 />
       </div>
     );
   }
