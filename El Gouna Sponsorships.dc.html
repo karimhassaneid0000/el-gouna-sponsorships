@@ -65,7 +65,7 @@
       </div>
 
       <!-- HERO -->
-      <div style="border-radius:22px;overflow:hidden;position:relative;background:linear-gradient(140deg,#123E6E 0%,#1B599F 55%,#2591B4 100%);padding:22px 20px 16px;box-shadow:0 12px 28px rgba(18,62,110,.24)">
+      <div onTouchStart="{{ heroTouchStart }}" onTouchEnd="{{ heroTouchEnd }}" style="touch-action:pan-y;border-radius:22px;overflow:hidden;position:relative;background:linear-gradient(140deg,#123E6E 0%,#1B599F 55%,#2591B4 100%);padding:22px 20px 16px;box-shadow:0 12px 28px rgba(18,62,110,.24)">
         <div style="position:absolute;right:-8px;top:-10px;font-size:120px;line-height:1;color:rgba(240,176,138,.22);animation:fst 7s ease-in-out infinite">✶</div>
         <div style="position:relative">
           <div style="font-size:11px;letter-spacing:.13em;color:rgba(255,255,255,.72);font-weight:600">{{ hero.tag }}</div>
@@ -375,6 +375,15 @@ class Component extends DCLogic {
     this._poll=setInterval(()=>this.loadLive(),60000);
   }
   componentWillUnmount(){ clearInterval(this._poll); clearTimeout(this._t); clearTimeout(this._retryT); }
+  heroTouchStart(e){ this._heroTouchX=e.touches[0].clientX; }
+  heroTouchEnd(e){
+    if(this._heroTouchX==null) return;
+    const dx=e.changedTouches[0].clientX-this._heroTouchX;
+    this._heroTouchX=null;
+    if(Math.abs(dx)<30) return;
+    const n=3, i=this.state.hero;
+    this.setState({hero: dx<0 ? (i+1)%n : (i-1+n)%n});
+  }
   nowStr(){ return new Date().toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'}); }
   money(v){ if(v==null||v==='')return 0; if(typeof v==='number')return v; const s=String(v).replace(/[^0-9.\-]/g,''); const n=parseFloat(s); return isNaN(n)?0:n; }
   toISO(v){ if(v==null||v==='')return null; if(typeof v==='number'){ const d=new Date(Date.UTC(1899,11,30)+v*86400000); return isNaN(d.getTime())?null:d.toISOString().slice(0,10); } const d=new Date(v); return isNaN(d.getTime())?null:d.toISOString().slice(0,10); }
@@ -574,6 +583,7 @@ class Component extends DCLogic {
       retrySync:()=>{ if(S.liveStatus!=='connecting'){ this.toastMsg('Refreshing…'); this.loadLive(); } },
       // home
       hero:heroSlides[S.hero], heroDots, attention, yearBars,
+      heroTouchStart:(e)=>this.heroTouchStart(e), heroTouchEnd:(e)=>this.heroTouchEnd(e),
       // deals
       q:S.q, setQ:(e)=>this.setState({q:e.target.value}),
       dealTabs, listDeals,
